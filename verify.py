@@ -1,6 +1,6 @@
 #! /bin/env python3
 
-import os, sys, subprocess, time, json, requests
+import os, sys, subprocess, time, re, json, requests
 
 def log(r):
     print('{0} {1} {2} {3}'.format(r.method, r.url, r.headers, r.body))
@@ -86,6 +86,32 @@ flatten = subprocess.run([
 
 source_code = flatten.stdout
 
+def get_library_info():
+    try:
+        makefile = open('./Makefile').read()
+        libraries_flags = re.findall('DAPP_LIBRARIES=\'(.*)\'', makefile)
+        if len(libraries_flags) == 0:
+            raise ValueError('No library flags found in Makefile')
+        libraries_flag = libraries_flags[0].strip().split(' ')
+        library_flag = libraries_flag[0]
+        library_components = library_flag.split(':')
+        if len(library_components) != 3:
+            raise ValueError('Malformed library flag: ', library_components)
+        library_name = library_components[1]
+        library_address = library_components[2]
+        return library_name, library_address
+    except FileNotFoundError:
+        raise ValueError('No Makefile found')
+
+library_name = ''
+library_address = ''
+
+try:
+    library_name, library_address = get_library_info()
+except ValueError as e:
+    print(e)
+    print('Assuming this contract uses no libraries')
+
 data = {
     'apikey': api_key,
     'module': module,
@@ -100,6 +126,8 @@ data = {
     'constructorArguements': constructor_arguments,
     'evmversion': evm_version,
     'licenseType': license_number,
+    'libraryname1': library_name,
+    'libraryaddress1': library_address,
 }
 
 if chain in ['mainnet', 'ethlive']:
