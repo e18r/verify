@@ -163,7 +163,7 @@ while check_response == {} or 'pending' in check_response['result'].lower():
         exit('Error: Etherscan responded with invalid JSON')
 
 if check_response['status'] != '1' or check_response['message'] != 'OK':
-    print('Error: ' + response['result'])
+    print('Error: ' + check_response['result'])
     exit()
 
 print('Contract verified at https://{0}{1}etherscan.io/address/{2}#code'.format(
