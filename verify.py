@@ -51,7 +51,7 @@ seth_chain = subprocess.run(['seth', 'chain'], capture_output=True)
 chain = seth_chain.stdout.decode('ascii').replace('\n', '')
 print(chain)
 
-text_metadata = content['contracts']['src/single.sol']['s']['metadata']
+text_metadata = content['contracts'][contract_path][contract_name]['metadata']
 metadata = json.loads(text_metadata)
 
 compiler_version = 'v' + metadata['compiler']['version']
@@ -62,7 +62,7 @@ optimizer_enabled = metadata['settings']['optimizer']['enabled']
 
 optimizer_runs = metadata['settings']['optimizer']['runs']
 
-license_name = metadata['sources']['src/single.sol']['license']
+license_name = metadata['sources'][contract_path]['license']
 
 license_numbers = {
     'GPL-3.0-or-later': 5,
