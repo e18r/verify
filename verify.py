@@ -1,6 +1,9 @@
 #! /bin/env python3
 
-import os, sys, subprocess, json, requests
+import os, sys, subprocess, time, json, requests
+
+def log(r):
+    print('{0} {1} {2} {3}'.format(r.method, r.url, r.headers, r.body))
 
 api_key = ''
 try:
@@ -43,6 +46,11 @@ for path in content['contracts'].keys():
 if contract_path == '':
     exit('contract name not found.')
 
+print('Obtaining chain... ')
+seth_chain = subprocess.run(['seth', 'chain'], capture_output=True)
+chain = seth_chain.stdout.decode('ascii').replace('\n', '')
+print(chain)
+
 text_metadata = content['contracts']['src/single.sol']['s']['metadata']
 metadata = json.loads(text_metadata)
 
@@ -69,7 +77,12 @@ action = 'verifysourcecode'
 
 code_format = 'solidity-single-file'
 
-flatten = subprocess.run(['hevm', 'flatten', '--source-file', contract_path], capture_output=True)
+flatten = subprocess.run([
+    'hevm',
+    'flatten',
+    '--source-file',
+    contract_path
+], capture_output=True)
 
 source_code = flatten.stdout
 
@@ -86,40 +99,75 @@ data = {
     'runs': optimizer_runs,
     'constructorArguements': constructor_arguments,
     'evmversion': evm_version,
-    'licenseType': license_number
+    'licenseType': license_number,
 }
 
-print(data)
-
-seth_chain = subprocess.run(['seth', 'chain'], capture_output=True)
-chain = seth_chain.stdout.decode('ascii').replace('\n', '')
-
 if chain in ['mainnet', 'ethlive']:
-    chain_chunk = ''
+    chain_separator = False
+    chain_id = ''
 else:
-    chain_chunk = '-' + chain
+    chain_separator = True
+    chain_id = chain
 
-url = 'https://api{}.etherscan.io/api'.format(chain_chunk)
+url = 'https://api{0}{1}.etherscan.io/api'.format(
+    '-' if chain_separator else '',
+    chain_id
+)
 
 headers = {
     'User-Agent': ''
 }
 
-r = requests.post(url, headers = headers, data = data)
+print('Sending verification request...')
 
-print(r.request.url)
-print(r.request.method)
-print(r.request.headers)
-print(r.request.body)
+verify = requests.post(url, headers = headers, data = data)
+
+log(verify.request)
 
 try:
-    response = json.loads(r.text)
+    verify_response = json.loads(verify.text)
 except json.decoder.JSONDecodeError:
-    print(r.text)
+    print(verify.text)
+    exit('Error: Etherscan responded with invalid JSON.')
+
+if verify_response['status'] != '1' or verify_response['message'] != 'OK':
+    print('Error: ' + verify_response['result'])
     exit()
 
-if response['status'] != '1' or response['message'] != 'NOTOK':
+print('Sent verification request with guid ' + verify_response['result'])
+
+guid = verify_response['result']
+
+check_response = {}
+
+while check_response == {} or 'pending' in check_response['result'].lower():
+
+    if check_response != {}:
+        print('Verification pending...')
+        time.sleep(1)
+
+    check = requests.post(url, headers = headers, data = {
+        'apikey': api_key,
+        'module': module,
+        'action': 'checkverifystatus',
+        'guid': guid,
+    })
+
+    if check_response == {}:
+        log(check.request)
+
+    try:
+        check_response = json.loads(check.text)
+    except json.decoder.JSONDecodeError:
+        print(check.text)
+        exit('Error: Etherscan responded with invalid JSON')
+
+if check_response['status'] != '1' or check_response['message'] != 'OK':
     print('Error: ' + response['result'])
     exit()
 
-print('Success: ' + response['result'])
+print('Contract verified at https://{0}{1}etherscan.io/address/{2}#code'.format(
+    chain_id,
+    '.' if chain_separator else '',
+    contract_address
+))
